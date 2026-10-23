@@ -1,0 +1,6 @@
+{
+  "name": "brainelecqc-protocol",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test web/test-*.mjs"}
+}
