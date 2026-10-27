@@ -1,7 +1,5 @@
 """Bounded raw windows and explicitly separate min/max overviews."""
 
-import json
-import struct
 import numpy as np
 
 from .signals import verified_catalog, assert_unchanged
@@ -106,9 +104,3 @@ def overview(artifact_id, stream_id, segment_id, channel_ids, start_sample, stop
                     bin_samples=bin_samples, bin_start_samples=starts, bin_stop_samples=stops)
     assert_unchanged(entry)
     return metadata, output
-
-
-def encode_window(metadata, array):
-    header = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
-    prefix = b"EPHY" + struct.pack("<I", len(header)) + header
-    return prefix + b"\0" * (-len(prefix) % 8) + array.astype("<f8", copy=False).tobytes(order="C")

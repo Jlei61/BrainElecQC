@@ -26,9 +26,10 @@ def main():
     grid = fig.add_gridspec(2, 2, height_ratios=[1, 2.5], hspace=.5, wspace=.35)
     summary = fig.add_subplot(grid[0, :]); summary.axis("off")
     summary.text(0, 1.05, "BrainElecQC · acceptance evidence", fontsize=20, weight="bold")
-    summary.text(0, .75, "Implementation checks and faithful reading; not detector accuracy or clinical validation", fontsize=11, color="#666666")
-    for x, number, label in [(0, checks["python_passed"], "Python tests passed"),(.25, checks["javascript_passed"], "JS protocol tests passed"),
-                             (.5, report["total_digital_samples_compared"], "Digital values: exact match"),(.79, checks["source_files_unchanged"], "Source code files unchanged")]:
+    summary.text(0, .75, "Python tests, independent numerical comparison and source preservation", fontsize=11, color="#666666")
+    for x, number, label in [(0, checks["python_passed"], "Python tests passed"),
+                             (.35, report["total_digital_samples_compared"], "Digital values: exact match"),
+                             (.72, checks["source_files_unchanged"], "Source code files unchanged")]:
         summary.text(x, .25, f"{number:,}", fontsize=28, weight="bold", color="#166b72")
         summary.text(x, -.04, label, fontsize=10)
     error_ax, time_ax = fig.add_subplot(grid[1, 0]), fig.add_subplot(grid[1, 1])
@@ -52,7 +53,7 @@ def main():
         time_ax.broken_barh([(start,duration)], (0,1), facecolors="#166b72")
         time_ax.text(start+duration/2,1.05,str(i+1),ha="center",fontsize=9)
     time_ax.set(ylim=(-.5,1.7), yticks=[], xlabel="Elapsed source-clock time (s)", title=f"b  Segmented SEEG: {len(spans)} spans; gaps preserved")
-    time_ax.text(.01,.05,"Blank intervals are acquisition gaps.\nNo zero filling, interpolation or time compression.",transform=time_ax.transAxes,fontsize=9)
+    time_ax.text(.01,.05,"Blank intervals are acquisition gaps.\nSegments retain their original sample times.",transform=time_ax.transAxes,fontsize=9)
     fig.text(.07,.025,"Source names, paths, waveforms and all acceptance outputs stay outside Git. Public repository contains source code, tests and generic documentation.",fontsize=10)
     fig.subplots_adjust(top=.9,bottom=.15,left=.08,right=.98)
     save(fig, output, "acceptance-summary")

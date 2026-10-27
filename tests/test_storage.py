@@ -7,16 +7,16 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from werkzeug.datastructures import FileStorage
 
-from brainelecqc import create_app, recordings
+from brainelecqc import recordings
 from brainelecqc.config import settings
 from brainelecqc.db import get_db
 from brainelecqc.storage import ImportConflict
+from tests.helpers import NamedInput
 
 
 def upload(data=b"recording bytes", name="same.edf"):
-    return FileStorage(stream=io.BytesIO(data), filename=name)
+    return NamedInput(stream=io.BytesIO(data), filename=name)
 
 
 def payload(**overrides):
@@ -37,7 +37,7 @@ def zip_upload(members):
         for name, contents in members:
             archive.writestr(name, contents)
     stream.seek(0)
-    return FileStorage(stream=stream, filename="recording.zip")
+    return NamedInput(stream=stream, filename="recording.zip")
 
 
 def assert_no_partial():
@@ -171,7 +171,7 @@ def test_stream_failure_and_database_failure_roll_back():
             if self.tell(): raise OSError("generated failure")
             return super().read(size)
     with pytest.raises(OSError):
-        recordings.import_recording(payload(), [FileStorage(stream=Broken(b"partial"), filename="broken.edf")])
+        recordings.import_recording(payload(), [NamedInput(stream=Broken(b"partial"), filename="broken.edf")])
     assert_no_partial()
     with get_db() as connection:
         connection.execute("CREATE TRIGGER reject_artifact BEFORE INSERT ON ephys_artifacts "
@@ -194,19 +194,22 @@ def test_unknown_or_ambiguous_declarations_are_not_silently_guessed(changes):
     assert_no_partial()
 
 
-def test_http_only_accepts_uploads_and_roundtrips_identity():
-    client = create_app({"TESTING": True}).test_client()
-    def post(**overrides):
-        return client.post("/api/v1/ephys/recordings", data={
-            "metadata": json.dumps(payload(import_key="http", **overrides)),
-            "files": (io.BytesIO(b"raw"), "record.edf")})
-    first = post()
-    assert first.status_code == 201
-    rid = first.get_json()["data"]["recording_id"]
-    assert post().get_json()["meta"]["reused"]
-    assert post(label="changed").status_code == 409
-    assert client.get(f"/api/v1/ephys/recordings/{rid}").status_code == 200
-    assert client.post(f"/api/v1/ephys/recordings/{rid}/verify").get_json()["data"]["valid"]
-    assert len(client.get("/api/v1/ephys/recordings").get_json()["data"]) == 1
-    assert client.post("/api/v1/ephys/recordings", json={"paths": ["/private/input.edf"]}).status_code == 400
-    assert client.get("/api/v1/ephys/recordings/missing").status_code == 404
+def test_python_stream_import_roundtrips_identity_and_idempotency():
+    def submit(**overrides):
+        return recordings.import_recording(payload(import_key="python-stream", **overrides),
+                                           uploads=[upload(b"raw", "record.edf")])
+    first, reused = submit()
+    assert not reused
+    rid = first["recording_id"]
+    second, reused = submit()
+    assert reused and second["recording_id"] == rid
+    assert second["input_artifact_id"] == first["input_artifact_id"]
+    with pytest.raises(ImportConflict):
+        submit(label="changed")
+    assert recordings.get_recording(rid) == first
+    assert recordings.verify_recording(rid)["valid"]
+    assert [r["recording_id"] for r in recordings.list_recordings()] == [rid]
+    with pytest.raises(ValueError):
+        recordings.import_recording(payload(paths=["input.edf"]), uploads=[upload()])
+    with pytest.raises(LookupError):
+        recordings.get_recording("missing")

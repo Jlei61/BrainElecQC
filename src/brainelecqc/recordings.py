@@ -86,7 +86,7 @@ def verify_recording(recording_id):
 def import_recording(payload, uploads=None, *, paths=None):
     """Copy explicit local paths or uploads, then publish a new immutable identity.
 
-    Local paths are a trusted Python/CLI boundary and are never accepted by HTTP.
+    Python and CLI callers supply explicit local paths or named binary streams.
     An import_key is global to this store; exact repeated bytes/metadata reuse it.
     """
     declared = descriptor(payload)

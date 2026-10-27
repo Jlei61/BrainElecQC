@@ -167,7 +167,7 @@ class SnapshotWriter:
         name = upload.filename
         safe_relative(name)
         if name.lower().endswith(".zip"):
-            # FileStorage is seekable; ZipFile streams decompression one member at a time.
+            # A seekable named stream lets ZipFile decompress one member at a time.
             self.add_zip(upload.stream)
         else:
             self.add_stream(name, upload.stream)

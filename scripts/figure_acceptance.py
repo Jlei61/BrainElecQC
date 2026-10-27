@@ -1,8 +1,7 @@
-"""Local visual evidence, not a production detector or human review service.
+"""Local QC figures with calibrated traces and illustrative candidate metrics.
 
-All traces retain calibrated volts. Candidate thresholds are illustrative and
-must be calibrated against independent human labels before scientific use.
-No inputs, outputs or review decisions produced here belong in Git.
+Evidence includes source units, sample ranges and actual review status.
+Inputs, figures and review decisions are stored outside the code repository.
 """
 import argparse
 import hashlib
@@ -103,7 +102,7 @@ def triptych(data, fs, names, metrics, output, alias, modality, start_seconds=0,
     colors = {"raw": "#34495e", "candidate": "#b86b16", "retained": "#166b72"}
     fig, axes = plt.subplots(1, 3, figsize=(15, 5.4), sharex=True, sharey=True)
     titles = ["1  Before QC", "2  Automatic candidates / before review",
-              "3  After SIMULATED review" if simulated else "3  Human review pending / unchanged"]
+              "3  After SIMULATED review" if simulated else "3  Human review: pending"]
     masked = data.copy()
     decisions = []
     if simulated:
@@ -137,11 +136,11 @@ def triptych(data, fs, names, metrics, output, alias, modality, start_seconds=0,
         ax.set_yticks([(len(selected)-1-r)*spacing for r in range(len(selected))], [names[i] for i in selected])
         ax.grid(axis="x", alpha=.15)
     axes[0].set_ylabel(f"Calibrated amplitude; row spacing {spacing:.0f} µV")
-    fig.suptitle(f"{modality} · {alias} · " + ("SYNTHETIC known-truth demonstration" if simulated else "REAL recording; candidate evidence only"), x=.07, ha="left", fontsize=14, weight="bold")
+    fig.suptitle(f"{modality} · {alias} · " + ("SYNTHETIC known-truth demonstration" if simulated else "REAL recording"), x=.07, ha="left", fontsize=14, weight="bold")
     if annotation_note:
         fig.text(.07, .87, annotation_note, fontsize=9, color="#7a581b")
-    fig.text(.07, .02, "Same samples, units, scale and channel order in all panels. No filtering, normalization or interpolation. "
-             + ("Simulation only; retained data can still contain artifacts." if simulated else "No manual approval or artifact accuracy claim."), fontsize=9)
+    fig.text(.07, .02, "Same samples, units, scale and channel order in all panels. "
+             + ("Review: scripted simulation." if simulated else "Review: awaiting a human decision."), fontsize=9)
     fig.subplots_adjust(left=.08, right=.99, bottom=.17, top=.79, wspace=.10)
     save(fig, output, alias)
     return {"selected_channel_indices": selected, "spacing_uV": spacing, "simulated_decisions": decisions,
@@ -152,24 +151,23 @@ def workflow(output):
     fig, ax = plt.subplots(figsize=(13.6, 7.0))
     ax.set(xlim=(0, 14), ylim=(0, 8)); ax.axis("off")
     labels = [
-        (0.3, 5.4, "1  Electrophysiology input", "EEG / SEEG / ECoG\nExplicit format + companion files", True),
-        (4.9, 5.4, "2  Immutable recording", "UUID + file hashes + snapshot\nRaw inputs never overwritten", True),
-        (9.5, 5.4, "3  Faithful read", "Units / channel order / segments\nNo hidden signal processing", True),
-        (9.5, 2.7, "4  Candidate detection", "Bad channels / intervals / line noise\nECG + EMG evidence; no auto-delete", False),
-        (4.9, 2.7, "5  Human review", "Confirm / reject / resize / add\nSame-window raw + evidence view", False),
-        (0.3, 2.7, "6  Versioned handoff", "Masks + decisions + provenance\nChannel / interval mapping + gate", False),
+        (0.3, 5.4, "1  Input", "EEG / SEEG / ECoG\nSignal files + recording metadata"),
+        (4.9, 5.4, "2  Read", "Calibrated samples + stable identity\nChannels / units / time segments"),
+        (9.5, 5.4, "3  Extract features", "PSD / alpha / 50 + 60 Hz\nBad channels + artifact evidence"),
+        (9.5, 2.7, "4  Report", "Summary + waveforms + spectra\nChannel / time / reason"),
+        (4.9, 2.7, "5  Human review", "Confirm / reject / resize / add\nSave decisions in the host"),
+        (0.3, 2.7, "6  Deliver", "Channel + interval masks\nReview version + source mapping"),
     ]
-    for x,y,title,body,done in labels:
-        ax.add_patch(FancyBboxPatch((x,y),4.2,1.75,boxstyle="round,pad=0.12",facecolor="#edf5f5" if done else "#f4f4f3",edgecolor="#166b72" if done else "#b0b0ad",linewidth=1.3))
+    for x,y,title,body in labels:
+        ax.add_patch(FancyBboxPatch((x,y),4.2,1.75,boxstyle="round,pad=0.12",facecolor="#edf5f5",edgecolor="#166b72",linewidth=1.3))
         ax.text(x+.15,y+1.3,title,fontsize=12,weight="bold",va="top")
         ax.text(x+.15,y+.8,body,fontsize=10,va="top",linespacing=1.7)
-        ax.text(x+.15,y+.12,"IMPLEMENTED FOUNDATION" if done else "PLANNED PRODUCT STAGE",fontsize=8,color="#166b72" if done else "#777777")
     for a,b in [((4.55,6.3),(4.7,6.3)),((9.15,6.3),(9.3,6.3)),((11.6,5.2),(11.6,4.65)),((9.3,3.55),(9.15,3.55)),((4.7,3.55),(4.55,3.55))]:
         ax.annotate("",xy=b,xytext=a,arrowprops={"arrowstyle":"-|>","color":"#34495e","lw":1.5})
-    ax.text(.25,7.65,"BrainElecQC · workflow and current boundary",fontsize=19,weight="bold")
-    ax.text(.3,1.7,"Independent Python core  →  local API / CLI  →  future thin host adapter",fontsize=12,color="#166b72")
-    ax.text(.3,.9,"No ICA · No CT/MRI · No inferred electrode geometry · Neuropixels deferred",fontsize=11)
-    ax.text(.3,.35,"This diagram distinguishes implemented S0–S2 foundations from the planned review product.",fontsize=10,color="#666666")
+    ax.text(.25,7.65,"BrainElecQC · product workflow",fontsize=19,weight="bold")
+    ax.text(.3,1.7,"Python computation + reports  →  Linxi processor  →  host review + downstream analysis",fontsize=12,color="#166b72")
+    ax.text(.3,.9,"Review comparison: original signals  /  automatic findings  /  human decisions",fontsize=11)
+    ax.text(.3,.35,"Product design · implementation sequence: overallplan.md",fontsize=10,color="#666666")
     save(fig, output, "qc-workflow")
 
 
@@ -210,7 +208,7 @@ def real_case(case, output):
             ax.grid(axis="x", alpha=.2)
         axes[-1].set_xlabel("Source-clock time (s)")
         fig.suptitle(case["alias"]+" · synchronous ECG / EMG reference evidence", fontsize=14)
-        fig.text(.13,.02,"Calibrated; each row has its own µV scale. Reference activity alone does not prove contamination. " + case.get("source_credit", ""),fontsize=8)
+        fig.text(.13,.02,"Calibrated; each row has its own µV scale. Synchronous reference signals for review. " + case.get("source_credit", ""),fontsize=8)
         fig.subplots_adjust(left=.14,bottom=.12,top=.9,hspace=.25)
         save(fig, output, case["alias"]+"-references")
     result["external_annotations"] = case.get("external_annotations", [])
@@ -226,7 +224,7 @@ def main():
     args = parser.parse_args()
     output = require_external(args.output)
     configure(); workflow(output)
-    results = {"scope": "Illustrative candidate metrics; no validated detector accuracy", "synthetic": {}, "real": {}}
+    results = {"scope": "Illustrative candidate metrics with explicit review status", "synthetic": {}, "real": {}}
     for modality in ("EEG", "SEEG", "ECoG"):
         data, fs, names, truth = synthetic_case(modality)
         metrics = candidate_metrics(data, fs, list(range(8)), 8)

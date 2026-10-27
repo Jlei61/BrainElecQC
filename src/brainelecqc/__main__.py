@@ -1,7 +1,7 @@
 """Local CLI. Import never mutates the supplied source files."""
 import argparse
+from contextlib import nullcontext
 import json
-import os
 from pathlib import Path
 import sys
 import zipfile
@@ -46,8 +46,6 @@ def main():
     parser = argparse.ArgumentParser(prog="python -m brainelecqc")
     parser.add_argument("--storage-root", help="Independent data directory outside the code checkout")
     commands = parser.add_subparsers(dest="command", required=True)
-    serve = commands.add_parser("serve")
-    serve.add_argument("--port", type=int, default=8840)
     ingest = commands.add_parser("import")
     ingest.add_argument("files", nargs="+")
     ingest.add_argument("--modality", required=True, choices=["eeg", "seeg", "ecog"])
@@ -56,18 +54,44 @@ def main():
     ingest.add_argument("--format-hint", action="append", default=[], metavar="[RELATIVE_PATH=]FORMAT",
                         help="Explicit vendor format; repeat with relative paths for file bundles")
     commands.add_parser("list")
+    qc = commands.add_parser("qc-eeg", help="Compute paper-defined EEG evidence, review candidates and Python figures")
+    qc.add_argument("files", nargs="+")
+    qc.add_argument("--output", required=True, help="New result directory outside the checkout")
+    qc.add_argument("--config", help="JSON object: selection, method_config, feature_config and policy_config")
+    qc.add_argument("--eeg-channels", help="Comma-separated source indices, e.g. 0,1,2,3")
+    qc.add_argument("--start", type=float, help="Analysis start in the source clock (seconds)")
+    qc.add_argument("--duration", type=float, help="Analysis duration (seconds)")
+    qc.add_argument("--plot-start", type=float, help="Waveform display start in source clock")
+    qc.add_argument("--plot-duration", type=float, default=15)
+    qc.add_argument("--title", default="EEG QC")
+    qc.add_argument("--format-hint", action="append", default=[], metavar="[RELATIVE_PATH=]FORMAT")
+    qc.add_argument("--no-figures", action="store_true", help="Export numerical evidence only")
     args = parser.parse_args()
-    if args.storage_root:
-        os.environ["BRAINELECQC_STORAGE_ROOT"] = args.storage_root
+    from .config import settings, storage_context
     try:
-        if args.command == "serve":
-            from . import create_app
-            create_app().run(host="127.0.0.1", port=args.port, debug=False)
-        else:
+        with storage_context(args.storage_root) if args.storage_root else nullcontext():
             from .db import init_db
-            from .config import settings
             from . import recordings
-            if args.command == "import":
+            if args.command == "qc-eeg":
+                from .eeg.pipeline import run_eeg_qc, validate_qc_config
+                from .eeg.export import export_eeg_qc
+                config = json.loads(Path(args.config).read_text(encoding="utf-8")) if args.config else {}
+                selection, feature_config, policy_config, method_config = validate_qc_config(config)
+                if args.eeg_channels is not None:
+                    selection["eeg_indices"] = [int(x) for x in args.eeg_channels.split(",")]
+                if args.start is not None:
+                    selection["start_seconds"] = args.start
+                if args.duration is not None:
+                    selection["duration_seconds"] = args.duration
+                hints = _format_hints(args.format_hint, args.files)
+                init_db()
+                record, _ = recordings.import_recording({"modality": "eeg", "label": args.title,
+                    "metadata": {"format_hints": hints} if hints else {}}, paths=args.files)
+                computed = run_eeg_qc(record["input_artifact_id"], **selection,
+                                     feature_config=feature_config, policy_config=policy_config, method_config=method_config)
+                result = export_eeg_qc(computed, args.output, figures=not args.no_figures, title=args.title,
+                                      display_start_seconds=args.plot_start, display_duration_seconds=args.plot_duration)
+            elif args.command == "import":
                 hints = _format_hints(args.format_hint, args.files)
                 payload = {"modality": args.modality,
                            "label": args.label or Path(args.files[0]).expanduser().name,

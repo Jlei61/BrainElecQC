@@ -1,7 +1,7 @@
-"""Internal processed-voltage publication. No API accepts arbitrary server paths.
+"""Publish processed voltage with its parent samples, clocks and parameters.
 
-S3 executors can publish verified outputs here; publication alone is never QC approval.
-The first format preserves parent sample clocks (no resampling or implicit gap filling).
+Workers provide output files and processing provenance through Python calls.
+Artifacts retain the original channel and segment mapping for later review.
 """
 from copy import deepcopy
 import hashlib

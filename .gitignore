@@ -41,6 +41,8 @@ local/
 *.fif.gz
 *.npy
 *.npz
+*.nwb
+*.NWB
 *.data
 *.head
 *.pnt

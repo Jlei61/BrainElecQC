@@ -4,7 +4,6 @@ import io
 
 import numpy as np
 import pytest
-from werkzeug.datastructures import FileStorage
 
 from brainelecqc.db import get_db
 from brainelecqc.config import settings
@@ -14,6 +13,7 @@ from brainelecqc.windows import samples, overview
 from brainelecqc.storage import ImportConflict
 from brainelecqc.derived import publish_voltage
 from tests.edf_fixtures import tal, write_edf_bdf
+from tests.helpers import NamedInput
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def processed(isolated_storage, tmp_path):
         {"label": "same", "records": [[3, 2, 1, 0], [-1, -2, -3, -4]]}],
         reserved="EDF+D", annotation_records=[tal(2.5), tal(8.5)])
     rec, _ = import_recording({"participant_id": "example", "modality": "seeg", "label": "raw"},
-                             [FileStorage(stream=io.BytesIO(source.read_bytes()), filename="raw.edf")])
+                             [NamedInput(stream=io.BytesIO(source.read_bytes()), filename="raw.edf")])
     parent = describe_artifact(rec["input_artifact_id"])
     raw_stream = parent["streams"][0]
     data = np.array([[-5, -3, -1, 1, 3, 5, 7, 9]], dtype="<f8") * 1e-6
@@ -118,7 +118,7 @@ def test_same_filename_in_different_artifacts_does_not_share_signal_identity(pro
     rec, _, path = processed
     source = path.parent / "raw.edf"
     again, _ = import_recording({"participant_id": "example", "modality": "seeg", "label": "raw"},
-                               [FileStorage(stream=io.BytesIO(source.read_bytes()), filename="raw.edf")])
+                               [NamedInput(stream=io.BytesIO(source.read_bytes()), filename="raw.edf")])
     a, b = [describe_artifact(r["input_artifact_id"])["streams"][0] for r in (rec, again)]
     for key in ("stream_id", "source_id", "clock_id"):
         assert a[key] != b[key]

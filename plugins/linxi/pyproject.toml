@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "linxi-brainelecqc"
+version = "0.1.0"
+description = "File-based EEG quality control processor for Linxi"
+requires-python = ">=3.12"
+dependencies = ["linxi==1.0.1", "brainelecqc[qc,figures,readers]==0.1.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["linxi_brainelecqc"]
