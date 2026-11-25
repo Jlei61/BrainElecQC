@@ -1,6 +1,6 @@
 # 开发与提交规范
 
-BrainElecQC 当前聚焦 EEG 质量检查，以 Python 计算核心、每文件报告和宿主插件为主线。
+BrainElecQC 提供 EEG 和 SEEG 信号质量检查，以 Python 计算核心和可复核报告为主。EEG 可通过 Linxi 插件接入。
 
 ## 文档与沟通
 

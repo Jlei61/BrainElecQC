@@ -25,6 +25,23 @@ def test_repeatable_initialization_preserves_identity():
     assert verify_recording(record["recording_id"])["valid"]
 
 
+def test_version_one_recordings_survive_seeg_qc_schema_upgrade():
+    record, _ = import_recording({"label": "generated", "modality": "seeg"},
+                                 [NamedInput(io.BytesIO(b"example"), "example.edf")])
+    with get_db() as connection:
+        connection.execute("DROP TABLE seeg_qc_audit")
+        connection.execute("DROP TABLE seeg_qc_runs")
+        connection.execute("PRAGMA user_version=1")
+    init_db()
+    init_db()
+    assert get_recording(record["recording_id"])["input_artifact_id"] == record["input_artifact_id"]
+    assert verify_recording(record["recording_id"])["valid"]
+    with get_db() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()["user_version"] == 2
+        assert connection.execute("SELECT count(*) AS count FROM seeg_qc_runs").fetchone()["count"] == 0
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
 def test_store_can_move_without_original_paths(tmp_path, monkeypatch):
     record, _ = import_recording({"label": "portable", "modality": "ecog"},
                                  [NamedInput(stream=io.BytesIO(b"example"), filename="example.edf")])

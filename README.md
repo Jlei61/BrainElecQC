@@ -1,6 +1,6 @@
 # BrainElecQC
 
-面向 **EEG** 的质量检查 Python 项目，可作为 Linxi 插件运行；每个输入文件以一份主报告供人工复核。
+面向 **EEG 和 SEEG** 的信号质量检查 Python 项目。EEG 支持 Linxi 插件和图文报告。SEEG 支持独立命令行，用于技术筛查、按样本复核和冻结导出。
 
 流程：**读取记录 → 自动检测与初评 → 人工复核 → 审核结果 → 下游分析**。
 
@@ -28,7 +28,16 @@ python -m brainelecqc qc-eeg /path/to/record.edf --eeg-channels 0,1,2,3 --durati
 
 EDF/BDF、BrainVision 使用包内读取器；BrainVision 导入包含 `.vhdr/.vmrk/.eeg` 的完整目录。FIF、EEGLAB 等扩展读取安装 `python -m pip install -e '.[readers]'`。逐格式入口与校验范围见 [格式说明](docs/formats.md)。
 
-## 看图与复核
+## SEEG 扫描与复核
+
+```bash
+python -m pip install -e '.[qc]'
+python -m brainelecqc --storage-root /path/to/private-store qc-seeg /path/to/record.edf --output /path/to/seeg-scan
+```
+
+打开 `qc_result.json` 查看通道映射、逐窗指标、频谱、波形候选和技术初评。填写同目录的 `review.json`，用 `review-seeg` 保存，用 `freeze-seeg` 冻结当前版本，再用 `export-seeg` 导出含报告和校验清单的 ZIP。命令及按原始样本查看证据的方法见 [SEEG QC 使用说明](docs/seeg-qc.md)。
+
+## EEG 看图与复核
 
 打开结果目录中的 **`review_report.md`**，先看质量总结中的异常通道占比、异常时间占比和整数初评，按右侧“人工复核”列查看证据，最后填写文件评价。图片下的链接打开 **`score_report.md`**，其中列出分项评分、扣分标准和人工调整栏。`quality_overview.tsv` 保存同一份核心指标表。
 
@@ -48,7 +57,7 @@ EDF/BDF、BrainVision 使用包内读取器；BrainVision 导入包含 `.vhdr/.v
 
 [异常占比与整数分档](docs/eeg-methods.md#6-自动整数评分与人工复核)：1.3% 短平线得 9/10，2/64 坏道得 18/20；完整头文件独立计 10 分。坏道图用红色系显示全部自动坏道，并配同参考组对照。
 
-自动结果保留全部样本并标记为待审核，审核保存与下游发布按 [实施计划](overallplan.md) 接入。计算与参数见 `methods.md`；程序读取 `quality_score.json`、`manifest.json` 和通道、时间表。图片输出 PNG。
+EEG 自动结果保留全部样本并标记为待审核，审核保存与下游发布按 [实施计划](overallplan.md) 接入。计算与参数见 `methods.md`；程序读取 `quality_score.json`、`manifest.json` 和通道、时间表。图片输出 PNG。
 
 重绘已有结果：
 
@@ -70,6 +79,7 @@ python scripts/figure_alpha_comparison.py /path/to/eyes-open-result /path/to/eye
 | 看模块函数、单独调用、把结果交给下游 | [QC 模块与接口](docs/portability.md) |
 | 在 Linxi 中运行 | [安装、YAML 与最短调用](docs/portability.md#运行第一版处理器)，使用 Python 3.12+ |
 | 理解每文件报告、EEG 检查项和人工复核 | [QC 设计](docs/qc-design.md) |
+| 运行 SEEG 技术筛查、保存复核和导出冻结版 | [SEEG QC 使用说明](docs/seeg-qc.md) |
 | 核对公式、论文、阈值与适用条件 | [EEG 方法说明](docs/eeg-methods.md) |
 | 查看后续工作和验收方式 | [overallplan](overallplan.md) |
 | 开发、运行测试、检查提交内容 | [开发规范](CONTRIBUTING.md)、[验收入口](docs/portability.md#开发与验收入口) |

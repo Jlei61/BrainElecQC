@@ -2,8 +2,10 @@
 import argparse
 from contextlib import nullcontext
 import json
+import os
 from pathlib import Path
 import sys
+from tempfile import TemporaryDirectory
 import zipfile
 
 
@@ -42,6 +44,90 @@ def _format_hints(values, files):
     return hints
 
 
+def _outside_checkout(path):
+    path = Path(path).expanduser().resolve()
+    if any((parent / ".git").exists() for parent in (path, *path.parents)):
+        raise ValueError("Choose a storage or output path outside Git checkouts")
+    return path
+
+
+def _new_output(path):
+    path = _outside_checkout(path)
+    if path.exists():
+        raise ValueError("Choose a new output path to preserve the existing QC result")
+    return path
+
+
+def _write_seeg_report(output, run):
+    template = {"base_revision": run["review"]["revision"], "reviewer": "", "decisions": []}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".seeg-qc-", dir=output.parent) as scratch:
+        staging = Path(scratch) / "report"
+        staging.mkdir()
+        for name, payload in (("qc_result.json", run), ("review.json", template)):
+            (staging / name).write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False, indent=2) + "\n",
+                                        encoding="utf-8")
+        staging.rename(output)
+
+
+def _seeg_command(args):
+    from .config import settings
+    from .db import init_db
+    from .recordings import import_recording
+    from .seeg import export_run, freeze_run, get_run, run_seeg_qc, save_review
+
+    _outside_checkout(settings.storage_root)
+    if args.command == "qc-seeg":
+        if bool(args.files) == bool(args.artifact_id):
+            raise ValueError("Select input files or --artifact-id")
+        if args.artifact_id and args.format_hint:
+            raise ValueError("Format hints are used only when importing files")
+        config = json.loads(Path(args.config).expanduser().read_text(encoding="utf-8")) if args.config else {}
+        if not isinstance(config, dict) or set(config) - {"config", "channel_map"}:
+            raise ValueError("SEEG configuration accepts config and channel_map fields")
+        output = _new_output(args.output)
+        if args.files:
+            hints = _format_hints(args.format_hint, args.files)
+            init_db()
+            record, _ = import_recording({
+                "modality": "seeg", "label": Path(args.files[0]).name,
+                "metadata": {"format_hints": hints} if hints else {},
+            }, paths=args.files)
+            artifact_id = record["input_artifact_id"]
+        else:
+            if not settings.db_path.is_file():
+                raise ValueError("No database in the selected storage root; import data or select the existing store")
+            init_db()
+            artifact_id = args.artifact_id
+        run = run_seeg_qc(artifact_id, **config)
+        _write_seeg_report(output, run)
+        return {"run_id": run["run_id"], "status": run["status"], "revision": run["review"]["revision"],
+                "output": str(output), "initial_score": run["report"]["initial_score"]["total"]}
+
+    if not settings.db_path.is_file():
+        raise ValueError("No database in the selected storage root; select the store for this QC run")
+    init_db()
+    if args.command == "show-seeg":
+        return get_run(args.run_id)
+    if args.command == "export-seeg":
+        output = _new_output(args.output)
+        payload = export_run(args.run_id)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(prefix=".seeg-export-", dir=output.parent) as scratch:
+            staging = Path(scratch) / "qc.zip"
+            staging.write_bytes(payload)
+            os.link(staging, output)
+        return {"run_id": args.run_id, "output": str(output)}
+    if args.command == "review-seeg":
+        run = save_review(args.run_id, json.loads(Path(args.review).expanduser().read_text(encoding="utf-8")))
+    else:
+        run = freeze_run(args.run_id, {"base_revision": args.base_revision, "reviewer": args.reviewer})
+    result = {"run_id": run["run_id"], "revision": run["review"]["revision"], "frozen": run["frozen"]}
+    if run["frozen"]:
+        result["assessment"] = run["assessment"]
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(prog="python -m brainelecqc")
     parser.add_argument("--storage-root", help="Independent data directory outside the code checkout")
@@ -66,6 +152,24 @@ def main():
     qc.add_argument("--title", default="EEG QC")
     qc.add_argument("--format-hint", action="append", default=[], metavar="[RELATIVE_PATH=]FORMAT")
     qc.add_argument("--no-figures", action="store_true", help="Export numerical evidence only")
+    seeg = commands.add_parser("qc-seeg", help="Compute and save technical SEEG quality evidence")
+    seeg.add_argument("files", nargs="*")
+    seeg.add_argument("--artifact-id", help="Scan an existing SEEG input or derived voltage artifact")
+    seeg.add_argument("--output", required=True, help="New report directory outside Git checkouts")
+    seeg.add_argument("--config", help="JSON object containing config and channel_map")
+    seeg.add_argument("--format-hint", action="append", default=[], metavar="[RELATIVE_PATH=]FORMAT")
+    show = commands.add_parser("show-seeg", help="Read a saved SEEG scan and its current review")
+    show.add_argument("run_id")
+    review = commands.add_parser("review-seeg", help="Save a complete decision list at its base revision")
+    review.add_argument("run_id")
+    review.add_argument("--review", required=True, help="JSON review payload")
+    freeze = commands.add_parser("freeze-seeg", help="Freeze and verify the current review")
+    freeze.add_argument("run_id")
+    freeze.add_argument("--base-revision", required=True, type=int)
+    freeze.add_argument("--reviewer", required=True)
+    export = commands.add_parser("export-seeg", help="Export an immutable QC ZIP")
+    export.add_argument("run_id")
+    export.add_argument("--output", required=True, help="New ZIP path outside Git checkouts")
     args = parser.parse_args()
     from .config import settings, storage_context
     try:
@@ -100,11 +204,13 @@ def main():
                 init_db()
                 record, reused = recordings.import_recording(payload, paths=args.files)
                 result = {"recording": record, "reused": reused}
-            else:
+            elif args.command == "list":
                 if not settings.db_path.is_file():
                     raise ValueError("No database in the selected storage root; import data or select the existing store")
                 init_db()
                 result = recordings.list_recordings()
+            else:
+                result = _seeg_command(args)
             print(json.dumps(result, ensure_ascii=False, indent=2))
     except (ValueError, LookupError, OSError, zipfile.BadZipFile) as error:
         parser.exit(2, f"brainelecqc: {error}\n")

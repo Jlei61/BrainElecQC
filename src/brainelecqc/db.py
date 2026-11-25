@@ -31,11 +31,14 @@ def get_db():
 def init_db():
     with get_db() as connection:
         version = connection.execute("PRAGMA user_version").fetchone()["user_version"]
-        if version not in (0, 1):
+        if version not in (0, 1, 2):
             raise ValueError("Unsupported database version; use the matching application version")
         # Reject databases from an unrelated application rather than altering them.
         tables = {row["name"] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if (version == 0 and tables) or tables - {"ephys_recordings", "ephys_artifacts"}:
+        allowed = {"ephys_recordings", "ephys_artifacts"}
+        if version == 2:
+            allowed.update({"seeg_qc_runs", "seeg_qc_audit"})
+        if (version == 0 and tables) or tables - allowed:
             raise ValueError("Storage database belongs to a different application")
         connection.executescript(Path(__file__).with_name("schema.sql").read_text())
